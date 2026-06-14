@@ -1,0 +1,95 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class LostPetReport extends Model
+{
+    use HasFactory, HasUuids;
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<int, string>
+     */
+    protected $fillable = [
+        'user_id',
+        'pet_id',
+        'pet_name',
+        'species',
+        'breed',
+        'color',
+        'description',
+        'photo_url',
+        'status',
+        'is_found',
+        'latitude',
+        'longitude',
+        'location_description',
+        'contact_phone',
+        'contact_email',
+        'lost_at',
+        'found_at',
+    ];
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'is_found' => 'boolean',
+            'latitude' => 'decimal:8',
+            'longitude' => 'decimal:8',
+            'lost_at' => 'datetime',
+            'found_at' => 'datetime',
+        ];
+    }
+
+    /**
+     * Get the user that filed the report.
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Get the pet associated with the report (optional).
+     */
+    public function pet(): BelongsTo
+    {
+        return $this->belongsTo(Pet::class);
+    }
+
+    /**
+     * Get the photos for the report.
+     */
+    public function photos(): HasMany
+    {
+        return $this->hasMany(LostPetReportPhoto::class, 'report_id');
+    }
+
+    /**
+     * Get the status updates for the report.
+     */
+    public function updates(): HasMany
+    {
+        return $this->hasMany(LostPetReportUpdate::class, 'report_id');
+    }
+
+    /**
+     * Get the alerts for the report.
+     */
+    public function alerts(): HasMany
+    {
+        return $this->hasMany(PetAlert::class, 'report_id');
+    }
+}
