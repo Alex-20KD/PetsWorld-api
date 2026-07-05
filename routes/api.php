@@ -36,5 +36,6 @@ Route::prefix('reports')->group(function () {
         Route::post('/', [LostPetReportController::class, 'store']);
         Route::put('/{id}', [LostPetReportController::class, 'update']);
         Route::delete('/{id}', [LostPetReportController::class, 'destroy']);
+        Route::post('/{id}/capture', [LostPetReportController::class, 'capture']);
     });
 });

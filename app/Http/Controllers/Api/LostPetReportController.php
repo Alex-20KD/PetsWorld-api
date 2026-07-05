@@ -9,9 +9,31 @@ use App\Services\SupabaseStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class LostPetReportController extends Controller
 {
+    /**
+     * Calculate the distance between two coordinates using the Haversine formula.
+     *
+     * @param  float  $lat1  Latitude of point 1
+     * @param  float  $lon1  Longitude of point 1
+     * @param  float  $lat2  Latitude of point 2
+     * @param  float  $lon2  Longitude of point 2
+     * @return float Distance in kilometers
+     */
+    private function haversineDistance(float $lat1, float $lon1, float $lat2, float $lon2): float
+    {
+        $R = 6371; // Earth's radius in km
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+        $a = sin($dLat / 2) * sin($dLat / 2) +
+             cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+             sin($dLon / 2) * sin($dLon / 2);
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        return $R * $c;
+    }
     /**
      * List paginated active reports with optional filters.
      *
@@ -268,4 +290,121 @@ class LostPetReportController extends Controller
             'data' => null,
         ]);
     }
+
+    /**
+     * Register a sighting/capture of a lost pet (Pokémon GO style).
+     *
+     * The capturer must be within the search radius and cannot be
+     * the report owner. Creates an update log entry and optionally
+     * uploads a sighting photo to Supabase Storage.
+     */
+    public function capture(Request $request, string $id): JsonResponse
+    {
+        $report = LostPetReport::with('user')->find($id);
+
+        if (!$report) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Reporte no encontrado',
+                'data' => null,
+            ], 404);
+        }
+
+        // The report owner cannot capture their own pet
+        if ($report->user_id === $request->user()->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No puedes reportar un avistamiento de tu propia mascota',
+                'data' => null,
+            ], 403);
+        }
+
+        // Report must be active
+        if ($report->status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Este reporte ya no está activo',
+                'data' => null,
+            ], 422);
+        }
+
+        // Validate capturer coordinates and optional photo
+        $validated = $request->validate([
+            'latitude' => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180',
+            'photo' => 'nullable|image|max:5120', // 5MB
+        ]);
+
+        // Determine the search radius (from the associated alert or default 5 km)
+        $radiusKm = 5;
+        $alert = $report->alerts()->first();
+        if ($alert && $alert->radius_km) {
+            $radiusKm = $alert->radius_km;
+        }
+
+        // Verify proximity using the Haversine formula
+        $distance = $this->haversineDistance(
+            (float) $report->latitude,
+            (float) $report->longitude,
+            (float) $validated['latitude'],
+            (float) $validated['longitude']
+        );
+
+        if ($distance > $radiusKm) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Debes estar más cerca de la zona de búsqueda para reportar un avistamiento',
+                'data' => null,
+            ], 422);
+        }
+
+        // Handle optional sighting photo upload
+        $photoUrl = null;
+        if ($request->hasFile('photo')) {
+            $storageService = new SupabaseStorageService();
+            $file = $request->file('photo');
+            $extension = $file->getClientOriginalExtension() ?: 'jpg';
+            $fileName = "reports/{$report->id}/sightings/" . Str::uuid() . ".{$extension}";
+
+            $supabaseUrl = rtrim(env('SUPABASE_URL', ''), '/');
+            $serviceKey = env('SUPABASE_SERVICE_KEY', '');
+            $bucket = env('SUPABASE_BUCKET', 'lost-pets');
+
+            $uploadUrl = "{$supabaseUrl}/storage/v1/object/{$bucket}/{$fileName}";
+
+            $response = \Illuminate\Support\Facades\Http::withToken($serviceKey)
+                ->withHeaders(['Content-Type' => $file->getMimeType()])
+                ->withBody($file->getContent(), $file->getMimeType())
+                ->post($uploadUrl);
+
+            if ($response->successful()) {
+                $photoUrl = "{$supabaseUrl}/storage/v1/object/public/{$bucket}/{$fileName}";
+            }
+        }
+
+        // Create the sighting update record
+        $capturerName = $request->user()->full_name;
+        $lat = $validated['latitude'];
+        $lng = $validated['longitude'];
+
+        $update = LostPetReportUpdate::create([
+            'report_id' => $report->id,
+            'user_id' => $request->user()->id,
+            'old_status' => $report->status,
+            'new_status' => $report->status, // Status does not change
+            'notes' => "Avistamiento reportado por {$capturerName} en coordenadas {$lat}, {$lng}",
+            'created_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => '¡Avistamiento registrado! El dueño ha sido notificado.',
+            'data' => [
+                'update' => $update,
+                'photo_url' => $photoUrl,
+                'contact_phone' => $report->contact_phone,
+            ],
+        ]);
+    }
 }
+
