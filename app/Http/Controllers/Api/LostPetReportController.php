@@ -256,8 +256,8 @@ class LostPetReportController extends Controller
             ], 404);
         }
 
-        // Only the owner can update the report
-        if ($report->user_id !== $request->user()->id) {
+        // Only the owner or an admin can update the report
+        if ($report->user_id !== $request->user()->id && $request->user()->role !== 'admin') {
             return response()->json([
                 'success' => false,
                 'message' => 'No tienes permiso para editar este reporte',
@@ -331,8 +331,8 @@ class LostPetReportController extends Controller
             ], 404);
         }
 
-        // Only the owner can delete the report
-        if ($report->user_id !== $request->user()->id) {
+        // Only the owner or an admin can delete the report
+        if ($report->user_id !== $request->user()->id && $request->user()->role !== 'admin') {
             return response()->json([
                 'success' => false,
                 'message' => 'No tienes permiso para eliminar este reporte',

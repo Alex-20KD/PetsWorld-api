@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\LostPetReportController;
 use App\Http\Controllers\Api\StatsController;
@@ -42,4 +43,11 @@ Route::prefix('reports')->group(function () {
         Route::delete('/{id}', [LostPetReportController::class, 'destroy']);
         Route::post('/{id}/capture', [LostPetReportController::class, 'capture']);
     });
+});
+
+// Rutas de administración (requieren auth + rol admin)
+Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {
+    Route::get('/stats', [AdminController::class, 'stats']);
+    Route::get('/users', [AdminController::class, 'users']);
+    Route::delete('/reports/{id}', [AdminController::class, 'deleteReport']);
 });
