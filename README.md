@@ -4,6 +4,15 @@ API REST para el sistema de mascotas perdidas de PetsWorld. Construida con **Lar
 
 ---
 
+## 🌟 Características Recientes (Backend)
+
+- **Estadísticas Públicas:** Endpoint `/api/stats` que expone contadores de reportes, mascotas rescatadas y usuarios activos para el ecosistema PetsWorld.
+- **Sistema de Recompensas:** Soporte completo en base de datos y validaciones para agregar `has_reward`, `reward_amount` y `reward_description` a los reportes.
+- **Privacidad y Ofuscación GPS:** Protección de ubicaciones exactas mediante fórmula de Haversine. Solo el dueño y administradores reciben la ubicación real (`is_exact_location: true`). Para el resto de usuarios, la latitud y longitud se ofuscan desplazándolas aleatoriamente en el radio de búsqueda.
+- **Panel de Administración:** Middleware de protección de rol (`admin`), endpoint de métricas avanzadas (Top Rescatadores), lista de usuarios detallada, y la capacidad de cancelar reportes de cualquier usuario por moderación.
+
+---
+
 ## 🏗️ Stack tecnológico
 
 | Componente | Tecnología |
@@ -122,15 +131,30 @@ http://<tu-ip>:8000/api
 | `GET` | `/auth/me` | Obtener usuario autenticado | ✅ |
 | `POST` | `/auth/logout` | Cerrar sesión | ✅ |
 
+### 📊 Estadísticas (Público)
+
+| Método | Endpoint | Descripción | Auth |
+|---|---|---|---|
+| `GET` | `/stats` | Estadísticas globales de reportes y rescates | ❌ |
+
 ### 🐾 Reportes de mascotas perdidas
 
 | Método | Endpoint | Descripción | Auth |
 |---|---|---|---|
-| `GET` | `/reports` | Listar reportes (paginado, con filtros) | ❌ |
-| `POST` | `/reports` | Crear nuevo reporte | ✅ |
-| `GET` | `/reports/{id}` | Ver detalle de reporte | ❌ |
-| `PUT` | `/reports/{id}` | Actualizar reporte (solo dueño) | ✅ |
-| `DELETE` | `/reports/{id}` | Cancelar reporte — soft delete (solo dueño) | ✅ |
+| `GET` | `/reports` | Listar reportes (paginado, ofuscado) | ❌ |
+| `POST` | `/reports` | Crear nuevo reporte (soporta recompensas) | ✅ |
+| `GET` | `/reports/{id}` | Ver detalle de reporte (ofuscado) | ❌ |
+| `PUT` | `/reports/{id}` | Actualizar reporte (dueño/admin) | ✅ |
+| `DELETE` | `/reports/{id}` | Cancelar reporte (dueño/admin) | ✅ |
+| `POST` | `/reports/{id}/capture`| Reportar avistamiento en radio GPS | ✅ |
+
+### 🛡️ Administración (Solo Admins)
+
+| Método | Endpoint | Descripción | Auth |
+|---|---|---|---|
+| `GET` | `/admin/stats` | Estadísticas avanzadas y Top Rescatadores | ✅ (Admin) |
+| `GET` | `/admin/users` | Lista de usuarios con métricas de actividad | ✅ (Admin) |
+| `DELETE` | `/admin/reports/{id}`| Eliminar/cancelar cualquier reporte por moderación | ✅ (Admin) |
 
 ### Filtros disponibles en `GET /reports`
 
