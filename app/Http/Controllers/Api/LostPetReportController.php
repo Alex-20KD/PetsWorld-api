@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\LostPetReport;
 use App\Models\LostPetReportUpdate;
+use App\Models\User;
 use App\Services\SupabaseStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -34,6 +35,56 @@ class LostPetReportController extends Controller
 
         return $R * $c;
     }
+
+    /**
+     * Generate obfuscated coordinates within a percentage of the search radius.
+     *
+     * @param  float  $lat       Original latitude
+     * @param  float  $lng       Original longitude
+     * @param  int    $radiusKm  Search radius in kilometers
+     * @return array{latitude: float, longitude: float}
+     */
+    private function obfuscateCoordinates(float $lat, float $lng, int $radiusKm = 5): array
+    {
+        // Desplazamiento aleatorio dentro del 60% del radio
+        $maxOffset = ($radiusKm * 0.6) / 111.32;
+        $offsetLat = (mt_rand(-1000, 1000) / 1000) * $maxOffset;
+        $offsetLng = (mt_rand(-1000, 1000) / 1000) * $maxOffset / cos(deg2rad($lat));
+
+        return [
+            'latitude'  => round($lat + $offsetLat, 6),
+            'longitude' => round($lng + $offsetLng, 6),
+        ];
+    }
+
+    /**
+     * Apply coordinate privacy to a report.
+     *
+     * The owner and admins see exact coordinates;
+     * everyone else receives an obfuscated position.
+     */
+    private function applyPrivacy(LostPetReport $report, ?User $user): LostPetReport
+    {
+        // El dueño y el admin ven coordenadas exactas
+        if ($user && ($user->id === $report->user_id || $user->role === 'admin')) {
+            $report->is_exact_location = true;
+            return $report;
+        }
+
+        // Todos los demás ven coordenadas ofuscadas
+        $obfuscated = $this->obfuscateCoordinates(
+            (float) $report->latitude,
+            (float) $report->longitude,
+            $report->radius_km ?? 5
+        );
+
+        $report->latitude  = $obfuscated['latitude'];
+        $report->longitude = $obfuscated['longitude'];
+        $report->is_exact_location = false;
+
+        return $report;
+    }
+
     /**
      * List paginated active reports with optional filters.
      *
@@ -77,6 +128,12 @@ class LostPetReportController extends Controller
         }
 
         $reports = $query->latest()->paginate(15);
+
+        // Apply coordinate privacy based on authenticated user
+        $user = auth('sanctum')->user();
+        $reports->getCollection()->transform(function ($report) use ($user) {
+            return $this->applyPrivacy($report, $user);
+        });
 
         return response()->json([
             'success' => true,
@@ -172,6 +229,10 @@ class LostPetReportController extends Controller
 
         // Refresh the model to get updated views count
         $report->refresh();
+
+        // Apply coordinate privacy based on authenticated user
+        $user = auth('sanctum')->user();
+        $report = $this->applyPrivacy($report, $user);
 
         return response()->json([
             'success' => true,

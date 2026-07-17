@@ -13,6 +13,22 @@ class LostPetReport extends Model
     use HasFactory, HasUuids;
 
     /**
+     * The accessors to append to the model's array form.
+     *
+     * @var array<int, string>
+     */
+    protected $appends = ['is_exact_location'];
+
+    /**
+     * Default value for the is_exact_location virtual attribute.
+     * Overridden at runtime by the controller's applyPrivacy method.
+     */
+    public function getIsExactLocationAttribute(): bool
+    {
+        return $this->attributes['is_exact_location'] ?? false;
+    }
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var array<int, string>
