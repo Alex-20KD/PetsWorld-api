@@ -35,6 +35,9 @@ class LostPetReport extends Model
         'contact_email',
         'lost_at',
         'found_at',
+        'has_reward',
+        'reward_amount',
+        'reward_description',
     ];
 
     /**
@@ -46,6 +49,8 @@ class LostPetReport extends Model
     {
         return [
             'is_found' => 'boolean',
+            'has_reward' => 'boolean',
+            'reward_amount' => 'decimal:2',
             'latitude' => 'decimal:8',
             'longitude' => 'decimal:8',
             'lost_at' => 'datetime',

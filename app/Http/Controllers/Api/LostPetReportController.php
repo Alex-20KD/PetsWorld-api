@@ -103,6 +103,9 @@ class LostPetReportController extends Controller
             'contact_email' => 'nullable|string|email|max:255',
             'lost_at' => 'nullable|date',
             'photo' => 'nullable|image|max:5120', // 5MB
+            'has_reward'         => 'boolean',
+            'reward_amount'      => 'nullable|numeric|min:0|max:9999',
+            'reward_description' => 'nullable|string|max:255',
         ]);
 
         // Handle photo upload to Supabase Storage
@@ -129,6 +132,9 @@ class LostPetReportController extends Controller
             'contact_phone' => $validated['contact_phone'] ?? null,
             'contact_email' => $validated['contact_email'] ?? null,
             'lost_at' => $validated['lost_at'] ?? null,
+            'has_reward' => $validated['has_reward'] ?? false,
+            'reward_amount' => $validated['reward_amount'] ?? null,
+            'reward_description' => $validated['reward_description'] ?? null,
         ]);
 
         $report->load('user:id,full_name', 'photos');
@@ -206,6 +212,9 @@ class LostPetReportController extends Controller
             'contact_email' => 'nullable|string|email|max:255',
             'is_found' => 'nullable|boolean',
             'found_at' => 'nullable|date',
+            'has_reward'         => 'boolean',
+            'reward_amount'      => 'nullable|numeric|min:0|max:9999',
+            'reward_description' => 'nullable|string|max:255',
         ]);
 
         $oldStatus = $report->status;
