@@ -10,7 +10,6 @@ use App\Services\SupabaseStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class LostPetReportController extends Controller
 {
@@ -39,9 +38,9 @@ class LostPetReportController extends Controller
     /**
      * Generate obfuscated coordinates within a percentage of the search radius.
      *
-     * @param  float  $lat       Original latitude
-     * @param  float  $lng       Original longitude
-     * @param  int    $radiusKm  Search radius in kilometers
+     * @param  float  $lat  Original latitude
+     * @param  float  $lng  Original longitude
+     * @param  int  $radiusKm  Search radius in kilometers
      * @return array{latitude: float, longitude: float}
      */
     private function obfuscateCoordinates(float $lat, float $lng, int $radiusKm = 5): array
@@ -52,7 +51,7 @@ class LostPetReportController extends Controller
         $offsetLng = (mt_rand(-1000, 1000) / 1000) * $maxOffset / cos(deg2rad($lat));
 
         return [
-            'latitude'  => round($lat + $offsetLat, 6),
+            'latitude' => round($lat + $offsetLat, 6),
             'longitude' => round($lng + $offsetLng, 6),
         ];
     }
@@ -68,6 +67,7 @@ class LostPetReportController extends Controller
         // El dueño y el admin ven coordenadas exactas
         if ($user && ($user->id === $report->user_id || $user->role === 'admin')) {
             $report->is_exact_location = true;
+
             return $report;
         }
 
@@ -78,7 +78,7 @@ class LostPetReportController extends Controller
             $report->radius_km ?? 5
         );
 
-        $report->latitude  = $obfuscated['latitude'];
+        $report->latitude = $obfuscated['latitude'];
         $report->longitude = $obfuscated['longitude'];
         $report->is_exact_location = false;
 
@@ -92,6 +92,14 @@ class LostPetReportController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $filters = $request->validate([
+            'species' => 'nullable|string|max:50',
+            'status' => 'nullable|string|in:active,found,cancelled,expired',
+            'lat' => 'nullable|required_with:lng,radius|numeric|between:-90,90',
+            'lng' => 'nullable|required_with:lat,radius|numeric|between:-180,180',
+            'radius' => 'nullable|required_with:lat,lng|numeric|between:0.1,100',
+        ]);
+
         $query = LostPetReport::query()
             ->with([
                 'user:id,full_name',
@@ -99,22 +107,22 @@ class LostPetReportController extends Controller
             ]);
 
         // Filter by species
-        if ($request->filled('species')) {
-            $query->where('species', $request->input('species'));
+        if (! empty($filters['species'])) {
+            $query->where('species', $filters['species']);
         }
 
         // Filter by status (default: only active)
-        if ($request->filled('status')) {
-            $query->where('status', $request->input('status'));
+        if (! empty($filters['status'])) {
+            $query->where('status', $filters['status']);
         } else {
             $query->where('status', 'active');
         }
 
         // Geolocation filter using Haversine formula
-        if ($request->filled(['lat', 'lng', 'radius'])) {
-            $lat = (float) $request->input('lat');
-            $lng = (float) $request->input('lng');
-            $radius = (float) $request->input('radius'); // in km
+        if (isset($filters['lat'], $filters['lng'], $filters['radius'])) {
+            $lat = (float) $filters['lat'];
+            $lng = (float) $filters['lng'];
+            $radius = (float) $filters['radius']; // in km
 
             $query->whereRaw('
                 (6371 * acos(
@@ -160,16 +168,16 @@ class LostPetReportController extends Controller
             'contact_phone' => 'nullable|string|max:50',
             'contact_email' => 'nullable|string|email|max:255',
             'lost_at' => 'nullable|date',
-            'photo' => 'nullable|image|max:5120', // 5MB
-            'has_reward'         => 'boolean',
-            'reward_amount'      => 'nullable|numeric|min:0|max:9999',
+            'photo' => 'nullable|file|image|mimes:jpg,jpeg,png,webp|max:5120|dimensions:max_width=6000,max_height=6000',
+            'has_reward' => 'boolean',
+            'reward_amount' => 'nullable|numeric|min:0|max:9999',
             'reward_description' => 'nullable|string|max:255',
         ]);
 
         // Handle photo upload to Supabase Storage
         $photoUrl = null;
         if ($request->hasFile('photo')) {
-            $storageService = new SupabaseStorageService();
+            $storageService = new SupabaseStorageService;
             $photoUrl = $storageService->uploadPhoto(
                 $request->file('photo'),
                 $request->user()->id
@@ -210,13 +218,9 @@ class LostPetReportController extends Controller
      */
     public function show(string $id): JsonResponse
     {
-        $report = LostPetReport::with([
-            'user:id,full_name',
-            'photos',
-            'updates',
-        ])->find($id);
+        $report = LostPetReport::find($id);
 
-        if (!$report) {
+        if (! $report) {
             return response()->json([
                 'success' => false,
                 'message' => 'Reporte no encontrado',
@@ -232,8 +236,14 @@ class LostPetReportController extends Controller
         // Refresh the model to get updated views count
         $report->refresh();
 
-        // Apply coordinate privacy based on authenticated user
         $user = auth('sanctum')->user();
+        $report->load('user:id,full_name', 'photos');
+
+        if ($user && ($user->id === $report->user_id || $user->role === 'admin')) {
+            $report->load('updates');
+        }
+
+        // Apply coordinate privacy based on authenticated user
         $report = $this->applyPrivacy($report, $user);
 
         return response()->json([
@@ -250,7 +260,7 @@ class LostPetReportController extends Controller
     {
         $report = LostPetReport::find($id);
 
-        if (!$report) {
+        if (! $report) {
             return response()->json([
                 'success' => false,
                 'message' => 'Reporte no encontrado',
@@ -276,15 +286,15 @@ class LostPetReportController extends Controller
             'radius_km' => 'nullable|integer|between:1,100',
             'is_found' => 'nullable|boolean',
             'found_at' => 'nullable|date',
-            'has_reward'         => 'boolean',
-            'reward_amount'      => 'nullable|numeric|min:0|max:9999',
+            'has_reward' => 'boolean',
+            'reward_amount' => 'nullable|numeric|min:0|max:9999',
             'reward_description' => 'nullable|string|max:255',
         ]);
 
         $oldStatus = $report->status;
 
         // If is_found changes to true, auto-set status and found_at
-        if (isset($validated['is_found']) && $validated['is_found'] && !$report->is_found) {
+        if (isset($validated['is_found']) && $validated['is_found'] && ! $report->is_found) {
             $validated['status'] = $validated['status'] ?? 'found';
             $validated['found_at'] = $validated['found_at'] ?? now();
 
@@ -326,7 +336,7 @@ class LostPetReportController extends Controller
     {
         $report = LostPetReport::find($id);
 
-        if (!$report) {
+        if (! $report) {
             return response()->json([
                 'success' => false,
                 'message' => 'Reporte no encontrado',
@@ -375,7 +385,7 @@ class LostPetReportController extends Controller
     {
         $report = LostPetReport::with('user')->find($id);
 
-        if (!$report) {
+        if (! $report) {
             return response()->json([
                 'success' => false,
                 'message' => 'Reporte no encontrado',
@@ -405,13 +415,13 @@ class LostPetReportController extends Controller
         $validated = $request->validate([
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
-            'photo' => 'nullable|image|max:5120', // 5MB
+            'photo' => 'nullable|file|image|mimes:jpg,jpeg,png,webp|max:5120|dimensions:max_width=6000,max_height=6000',
         ]);
 
         // The report owns the search radius. Fall back to a legacy alert only
         // for reports created before radius_km was added to this table.
         $radiusKm = $report->radius_km;
-        if (!$radiusKm) {
+        if (! $radiusKm) {
             $radiusKm = $report->alerts()->value('radius_km') ?? 5;
         }
 
@@ -434,25 +444,12 @@ class LostPetReportController extends Controller
         // Handle optional sighting photo upload
         $photoUrl = null;
         if ($request->hasFile('photo')) {
-            $storageService = new SupabaseStorageService();
-            $file = $request->file('photo');
-            $extension = $file->getClientOriginalExtension() ?: 'jpg';
-            $fileName = "reports/{$report->id}/sightings/" . Str::uuid() . ".{$extension}";
-
-            $supabaseUrl = rtrim(env('SUPABASE_URL', ''), '/');
-            $serviceKey = env('SUPABASE_SERVICE_KEY', '');
-            $bucket = env('SUPABASE_BUCKET', 'lost-pets');
-
-            $uploadUrl = "{$supabaseUrl}/storage/v1/object/{$bucket}/{$fileName}";
-
-            $response = \Illuminate\Support\Facades\Http::withToken($serviceKey)
-                ->withHeaders(['Content-Type' => $file->getMimeType()])
-                ->withBody($file->getContent(), $file->getMimeType())
-                ->post($uploadUrl);
-
-            if ($response->successful()) {
-                $photoUrl = "{$supabaseUrl}/storage/v1/object/public/{$bucket}/{$fileName}";
-            }
+            $storageService = new SupabaseStorageService;
+            $photoUrl = $storageService->uploadPhoto(
+                $request->file('photo'),
+                $report->id,
+                'sightings'
+            );
         }
 
         // Create the sighting update record
@@ -480,4 +477,3 @@ class LostPetReportController extends Controller
         ]);
     }
 }
-
