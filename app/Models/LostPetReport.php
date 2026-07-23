@@ -49,6 +49,7 @@ class LostPetReport extends Model
         'location_description',
         'contact_phone',
         'contact_email',
+        'radius_km',
         'lost_at',
         'found_at',
         'has_reward',
@@ -69,6 +70,7 @@ class LostPetReport extends Model
             'reward_amount' => 'decimal:2',
             'latitude' => 'decimal:8',
             'longitude' => 'decimal:8',
+            'radius_km' => 'integer',
             'lost_at' => 'datetime',
             'found_at' => 'datetime',
         ];

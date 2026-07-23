@@ -155,6 +155,7 @@ class LostPetReportController extends Controller
             'description' => 'required|string',
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
+            'radius_km' => 'required|integer|between:1,100',
             'location_description' => 'nullable|string|max:500',
             'contact_phone' => 'nullable|string|max:50',
             'contact_email' => 'nullable|string|email|max:255',
@@ -185,6 +186,7 @@ class LostPetReportController extends Controller
             'photo_url' => $photoUrl,
             'latitude' => $validated['latitude'],
             'longitude' => $validated['longitude'],
+            'radius_km' => $validated['radius_km'],
             'location_description' => $validated['location_description'] ?? null,
             'contact_phone' => $validated['contact_phone'] ?? null,
             'contact_email' => $validated['contact_email'] ?? null,
@@ -271,6 +273,7 @@ class LostPetReportController extends Controller
             'pet_name' => 'nullable|string|max:255',
             'contact_phone' => 'nullable|string|max:50',
             'contact_email' => 'nullable|string|email|max:255',
+            'radius_km' => 'nullable|integer|between:1,100',
             'is_found' => 'nullable|boolean',
             'found_at' => 'nullable|date',
             'has_reward'         => 'boolean',
@@ -405,11 +408,11 @@ class LostPetReportController extends Controller
             'photo' => 'nullable|image|max:5120', // 5MB
         ]);
 
-        // Determine the search radius (from the associated alert or default 5 km)
-        $radiusKm = 5;
-        $alert = $report->alerts()->first();
-        if ($alert && $alert->radius_km) {
-            $radiusKm = $alert->radius_km;
+        // The report owns the search radius. Fall back to a legacy alert only
+        // for reports created before radius_km was added to this table.
+        $radiusKm = $report->radius_km;
+        if (!$radiusKm) {
+            $radiusKm = $report->alerts()->value('radius_km') ?? 5;
         }
 
         // Verify proximity using the Haversine formula
