@@ -53,10 +53,12 @@ class AuthController extends Controller
             'password' => 'required|string|max:255',
         ]);
 
-        if (! Auth::attempt([
-            'email' => $request->string('email')->toString(),
-            'password' => $request->string('password')->toString(),
-        ])) {
+        /** @var User|null $user */
+        $user = User::query()
+            ->where('email', $request->string('email')->toString())
+            ->first();
+
+        if (! $user || ! $this->passwordIsValid($user, $request->string('password')->toString())) {
             return response()->json([
                 'success' => false,
                 'message' => 'Credenciales incorrectas',
@@ -64,8 +66,7 @@ class AuthController extends Controller
             ], 401);
         }
 
-        /** @var User $user */
-        $user = Auth::user();
+        Auth::login($user);
 
         if ($user->is_banned) {
             Auth::logout();
@@ -85,6 +86,33 @@ class AuthController extends Controller
             'message' => 'Inicio de sesión exitoso',
             'data' => ['user' => $user, 'token' => $token],
         ]);
+    }
+
+    /**
+     * Accept legacy bcryptjs hashes once and immediately upgrade them to Laravel bcrypt.
+     */
+    private function passwordIsValid(User $user, string $plainPassword): bool
+    {
+        $storedHash = (string) $user->getAuthPassword();
+        $isLegacyBcryptJs = str_starts_with($storedHash, '$2a$') || str_starts_with($storedHash, '$2b$');
+
+        if ($isLegacyBcryptJs) {
+            if (! password_verify($plainPassword, $storedHash)) {
+                return false;
+            }
+
+            $user->forceFill([
+                'password' => Hash::make($plainPassword),
+            ])->save();
+
+            return true;
+        }
+
+        try {
+            return Hash::check($plainPassword, $storedHash);
+        } catch (RuntimeException) {
+            return false;
+        }
     }
 
     public function logout(Request $request): JsonResponse
