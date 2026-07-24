@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
@@ -66,11 +65,7 @@ class AuthController extends Controller
             ], 401);
         }
 
-        Auth::login($user);
-
         if ($user->is_banned) {
-            Auth::logout();
-
             return response()->json([
                 'success' => false,
                 'message' => 'La cuenta no está habilitada.',
