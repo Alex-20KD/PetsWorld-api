@@ -1,12 +1,17 @@
 # 1. Usar la imagen oficial de PHP
 FROM php:8.4-cli
 
-# 2. Instalar dependencias del sistema y extensiones de PostgreSQL
+# 2. Instalar dependencias y extensiones de PostgreSQL/GD para imágenes
 RUN apt-get update && apt-get install -y \
     git \
     unzip \
     libpq-dev \
-    && docker-php-ext-install pdo pdo_pgsql
+    libjpeg62-turbo-dev \
+    libpng-dev \
+    libwebp-dev \
+    && docker-php-ext-configure gd --with-jpeg --with-webp \
+    && docker-php-ext-install pdo pdo_pgsql gd \
+    && rm -rf /var/lib/apt/lists/*
 
 # 3. Instalar Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
