@@ -1,5 +1,5 @@
 # 1. Usar la imagen oficial de PHP
-FROM php:8.2-cli
+FROM php:8.4-cli
 
 # 2. Instalar dependencias del sistema y extensiones de PostgreSQL
 RUN apt-get update && apt-get install -y \
